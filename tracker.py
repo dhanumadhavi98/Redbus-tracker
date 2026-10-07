@@ -108,29 +108,55 @@ def fetch(cfg, date, debug=False):
     with sync_playwright() as p:
         b = p.chromium.launch(
             headless=not debug,
-            args=["--disable-http2", "--no-sandbox", "--disable-dev-shm-usage"]
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-blink-features=AutomationControlled",  # hides headless flag
+                "--disable-infobars",
+                "--window-size=1366,900",
+            ]
         )
-        ctx = b.new_context(locale="en-IN", viewport={"width": 1366, "height": 900},
-                            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                                       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+        ctx = b.new_context(
+            locale="en-IN",
+            viewport={"width": 1366, "height": 900},
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            extra_http_headers={
+                "Accept-Language": "en-IN,en;q=0.9",
+                "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "sec-ch-ua":       '"Chromium";v="124", "Google Chrome";v="124"',
+                "sec-ch-ua-mobile":"?0",
+                "sec-ch-ua-platform": '"Windows"',
+            }
+        )
+        # Mask navigator.webdriver so redBus bot-detection doesn't flag us
+        ctx.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins',   { get: () => [1, 2, 3] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-IN', 'en'] });
+            window.chrome = { runtime: {} };
+        """)
         page = ctx.new_page()
         def on_resp(resp):
             if "json" in (resp.headers.get("content-type") or ""):
                 try: captured.append(resp.json())
                 except Exception: pass
         page.on("response", on_resp)
-        for attempt in range(2):
+        for attempt in range(3):
             try:
-                page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                # "commit" fires as soon as HTTP response starts — much faster than domcontentloaded
+                page.goto(url, wait_until="commit", timeout=60000)
                 break
             except Exception as e:
-                if attempt == 1:
+                if attempt == 2:
                     raise
                 print(f"  [fetch] goto attempt {attempt+1} failed, retrying...", file=sys.stderr)
-                page.wait_for_timeout(2000)
-        page.wait_for_timeout(8000)
+                page.wait_for_timeout(3000)
+        page.wait_for_timeout(10000)             # wait for JS/XHR to settle
         for _ in range(8):                       # scroll to load lazy results
-            page.mouse.wheel(0, 3000); page.wait_for_timeout(1200)
+            page.mouse.wheel(0, 3000); page.wait_for_timeout(1500)
         for c in captured: walk(c, found)
         if not found: found = dom_fallback(page)
         if debug or not found:
