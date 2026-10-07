@@ -1,0 +1,65 @@
+name: bus-fare-tracker
+on:
+  schedule:
+    - cron: "0 */6 * * *"        # every 6 hours (UTC): 00:00, 06:00, 12:00, 18:00
+  workflow_dispatch:             # lets you press "Run workflow" manually
+permissions:
+  contents: read
+concurrency:
+  group: bus-tracker
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check if tracking period is still active (stop after Oct 25)
+        id: date_check
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          STOP_AFTER="2026-10-25"
+          if [[ "$TODAY" > "$STOP_AFTER" ]]; then
+            echo "Today ($TODAY) is past $STOP_AFTER. Skipping run."
+            echo "active=false" >> $GITHUB_OUTPUT
+          else
+            echo "Today ($TODAY) is within tracking period. Proceeding."
+            echo "active=true" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.date_check.outputs.active == 'true'
+
+      - uses: actions/setup-python@v5
+        if: steps.date_check.outputs.active == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Restore fares DB from cache
+        if: steps.date_check.outputs.active == 'true'
+        uses: actions/cache@v4
+        with:
+          path: fares.db
+          key: fares-db-${{ github.run_id }}
+          restore-keys: fares-db-
+
+      - name: Install dependencies
+        if: steps.date_check.outputs.active == 'true'
+        run: pip install -r requirements.txt && playwright install --with-deps chromium
+
+      - name: Run tracker
+        if: steps.date_check.outputs.active == 'true'
+        run: python tracker.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Upload debug files if parsing failed
+        if: steps.date_check.outputs.active == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug
+          path: |
+            debug_*.png
+            debug_*.html
+          if-no-files-found: ignore

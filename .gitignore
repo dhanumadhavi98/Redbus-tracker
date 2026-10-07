@@ -1,0 +1,4 @@
+.env
+debug_*
+__pycache__/
+fares.db

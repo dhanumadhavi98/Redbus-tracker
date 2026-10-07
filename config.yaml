@@ -1,0 +1,26 @@
+# ---- EDIT THESE ----
+route:
+  from_city: "Nandikotkur"
+  to_city: "Bangalore"
+  from_slug: "nandikotkur"      # as seen in the redBus URL
+  to_slug: "bangalore"
+  dates: ["2026-10-25"]         # tracking Oct 25th specifically
+  track_next_days: 3            # used when dates is empty: today + next N-1 days
+
+filters:                        # all optional
+  max_price: null
+  departure_after: null         # e.g. "18:00"
+  departure_before: null        # e.g. "23:59"
+  bus_type_contains: ""         # e.g. "AC", "Sleeper"
+  operator_contains: ""
+
+alerts:
+  min_change_rupees: 20         # ignore fare changes smaller than this
+  notify_on_new_bus: true
+  notify_on_sold_out: false
+  below_threshold: null         # alert when a fare drops to/below this, e.g. 700
+  low_seats_warn: 5             # alert when available seats drop to/below this number
+
+notify:
+  my_mobile: "+918147742537"    # label only: Telegram delivers to the Telegram account linked to this number
+  channels: ["telegram"]
