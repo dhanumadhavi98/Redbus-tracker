@@ -294,16 +294,18 @@ def run_once(cfg, debug=False):
         if not buses:
             print("  No buses parsed. See debug_*.png/html and adjust parser if needed."); continue
         msgs, first = compare(c, date, buses, cfg)
-        if first:
-            sorted_buses = sorted(buses, key=lambda b: b["fare"])
-            lines = [f"Nandikotkur -> Bangalore  |  {date}  |  {len(buses)} buses found\n"]
-            lines += [bus_summary_line(b) for b in sorted_buses[:30]]
-            notify("\n".join(lines), cfg)
-            # also print to console
-            print("\n".join(lines))
-        elif msgs:
-            notify(f"{r['from_city']}->{r['to_city']} {date}\n" + "\n".join(msgs[:25]), cfg)
-            print("\n".join(msgs))
+
+        # Always send the full bus list every run
+        sorted_buses = sorted(buses, key=lambda b: b["fare"])
+        header = f"Nandikotkur -> Bangalore  |  {date}  |  {len(buses)} buses\n"
+        bus_lines = "\n".join(bus_summary_line(b) for b in sorted_buses[:30])
+
+        # Append change alerts below the list if any
+        change_section = ("\n\nChanges:\n" + "\n".join(msgs[:25])) if msgs and not first else ""
+
+        full_msg = header + bus_lines + change_section
+        notify(full_msg, cfg)
+        print(full_msg)
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
